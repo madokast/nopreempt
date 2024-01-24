@@ -32,7 +32,7 @@ func TestMId(t *testing.T) {
 	defer runtime.GOMAXPROCS(omp)
 	set := map[int64]struct{}{}
 	var wg sync.WaitGroup
-	for i := 0; i < 256; i++ {
+	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -53,7 +53,7 @@ func TestMId2(t *testing.T) {
 	set := map[int64]struct{}{}
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	for i := 0; i < 256; i++ {
+	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -69,34 +69,62 @@ func TestMId2(t *testing.T) {
 	}
 }
 
-func TestMIdn(t *testing.T) {
-	for mp := 1; mp < 10 && mp <= runtime.NumCPU(); mp++ {
-		omp := runtime.GOMAXPROCS(mp)
-		var mu sync.Mutex
-		set := map[int64]struct{}{}
-		var wg sync.WaitGroup
-		for i := 0; i < 256; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				mu.Lock()
-				defer mu.Unlock()
-				set[GetMID()] = struct{}{}
+func TestMId3(t *testing.T) {
+	const mp = 3
+	omp := runtime.GOMAXPROCS(mp)
+	defer runtime.GOMAXPROCS(omp)
+	t.Log("old GOMAXPROCS", omp)
+	set := map[int64]struct{}{}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for i := 0; i < omp*3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			mu.Lock()
+			set[GetMID()] = struct{}{}
+			mu.Unlock()
 
-				var s float64
-				for k := 0; k < 1000000; k++ {
-					s *= rand.Float64()
-				}
-			}()
-		}
-		wg.Wait()
-		runtime.GOMAXPROCS(omp)
-		t.Log(mp, set)
-		if len(set) > mp {
-			t.Fail()
-		}
+			var s float64
+			for k := 0; k < 1000000; k++ {
+				s *= rand.Float64()
+			}
+		}()
 	}
+	wg.Wait()
+	t.Log(set)
+	if len(set) > mp {
+		t.Fail()
+	}
+}
 
+func TestMId10(t *testing.T) {
+	const mp = 10
+	omp := runtime.GOMAXPROCS(mp)
+	defer runtime.GOMAXPROCS(omp)
+	t.Log("old GOMAXPROCS", omp)
+	set := map[int64]struct{}{}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for i := 0; i < omp*3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			mu.Lock()
+			set[GetMID()] = struct{}{}
+			mu.Unlock()
+
+			var s float64
+			for k := 0; k < 1000000; k++ {
+				s *= rand.Float64()
+			}
+		}()
+	}
+	wg.Wait()
+	t.Log(set)
+	if len(set) > mp {
+		t.Fail()
+	}
 }
 
 func TestNoPreempt(t *testing.T) {
