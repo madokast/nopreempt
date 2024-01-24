@@ -1,0 +1,140 @@
+name: Go
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - armv6
+          - armv7
+          - aarch64
+          - 386
+          - x64
+        go:
+          - '1.16'
+          - '1.17'
+          - '1.18'
+          - '1.19'
+          - '1.20'
+          - '1.21'
+        # Race detector binaries crash with:
+        #
+        # FATAL: ThreadSanitizer: unsupported VMA range
+        #
+        # See https://github.com/golang/go/issues/29948.
+        arm64_unsupported_vma_range:
+          - true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        if: ${{ !startsWith(matrix.go, 'gccgo-') }}
+        uses: actions/setup-go@v5.0.0
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Set up gccgo
+        if: ${{ startsWith(matrix.go, 'gccgo-') }}
+        run: |
+          sudo apt update && \
+          sudo apt install -y ${{ matrix.go }} && \
+          echo ${{ matrix.go }} | sed 's/^gcc//' | xargs -I % ln -s /usr/bin/% /usr/local/bin/go && \
+          go version
+      - name: 'Build with ${{ matrix.go }}'
+        if: ${{ matrix.arch == 'x64' }}
+        run: go build -v ./...
+      - name: 'Build with ${{ matrix.go }}'
+        if: ${{ matrix.arch == '386' }}
+        env:
+          GOARCH: 386
+        run: go build -v ./...
+      - name: 'Check that Get is inlined with ${{ matrix.go }}'
+        if: ${{ !startsWith(matrix.go, 'gccgo-') && matrix.arch == 'x64' }}
+        run: |
+          if echo -e '${{ matrix.go }}\n1.12' | sort -V | head -n1 | xargs test 1.12 = ; then
+            go build -gcflags='-m' 2>&1 | grep 'can inline Get$' > /dev/null
+          fi
+      - name: 'Check that Get is inlined with ${{ matrix.go }}'
+        if: ${{ !startsWith(matrix.go, 'gccgo-') && matrix.arch == '386' }}
+        env:
+          GOARCH: 386
+        run: |
+          if echo -e '${{ matrix.go }}\n1.12' | sort -V | head -n1 | xargs test 1.12 = ; then
+            go build -gcflags='-m' 2>&1 | grep 'can inline Get$' > /dev/null
+          fi
+      - name: 'BuildRace with ${{ matrix.go }}'
+        if: ${{ matrix.arch == 'x64' && !matrix.x64_race_broken }}
+        run: go build -race -v ./...
+      - name: 'Test with ${{ matrix.go }}'
+        if: ${{ matrix.arch == 'x64' }}
+        run: go test -v ./...
+      - name: 'Test with ${{ matrix.go }}'
+        if: ${{ matrix.arch == '386' }}
+        env:
+          GOARCH: 386
+        run: go test -v ./...
+      - name: 'TestRace with ${{ matrix.go }}'
+        if: ${{ matrix.arch == 'x64' && !matrix.x64_race_broken }}
+        run: go test -race -v ./...
+      - name: 'Bench with ${{ matrix.go }}'
+        if: ${{ matrix.arch == 'x64' }}
+        run: go test -bench=. -benchmem -v ./...
+      - name: 'Bench with ${{ matrix.go }}'
+        if: ${{ matrix.arch == '386' }}
+        env:
+          GOARCH: 386
+        run: go test -bench=. -benchmem -v ./...
+      - name: 'BenchRace with ${{ matrix.go }}'
+        if: ${{ matrix.arch == 'x64' && !matrix.x64_race_broken }}
+        run: go test -bench=. -benchmem -race -v ./...
+      - name: 'BuildTest with ${{ matrix.go }} for armv6'
+        if: ${{ matrix.arch == 'armv6' }}
+        env:
+          GOARCH: arm
+          GOARM: 6
+        run: go test -c ./...
+      - name: 'BuildTest with ${{ matrix.go }} for armv7'
+        if: ${{ matrix.arch == 'armv7' }}
+        env:
+          GOARCH: arm
+          GOARM: 7
+        run: go test -c ./...
+      - name: 'BuildTest with ${{ matrix.go }} for aarch64'
+        if: ${{ matrix.arch == 'aarch64' }}
+        env:
+          GOARCH: arm64
+        run: go test -c ./...
+      - name: 'BuildTestRace with ${{ matrix.go }} for aarch64'
+        if: ${{ matrix.arch == 'aarch64' && !matrix.arm64_race_unsupported }}
+        env:
+          GOARCH: arm64
+          CGO_ENABLED: 1
+        run: |
+          # Non-host *.syso files are missing from the Go toolchains provided
+          # by setup-go. See https://github.com/actions/setup-go/issues/181.
+          curl --location --output $(go env GOROOT)/src/runtime/race/race_linux_arm64.syso \
+            https://github.com/golang/go/raw/release-branch.go${{ matrix.go }}/src/runtime/race/race_linux_arm64.syso && \
+          sudo apt update && \
+          sudo apt install gcc-aarch64-linux-gnu && \
+          CC=aarch64-linux-gnu-gcc CC_FOR_TARGET=gcc-aarch64-linux-gnu go test -c -race -o goid.race.test ./...
+      - name: 'DeleteTestRace with $$ {{ matrix.go}} for aarch64'
+        if: ${{ matrix.arch == 'aarch64' && !matrix.arm64_race_unsupported && matrix.arm64_unsupported_vma_range }}
+        run: rm goid.race.test
+      - name: 'Test and Bench with ${{ matrix.go }} on ${{ matrix.arch }}'
+        if: ${{ matrix.arch != '386' && matrix.arch != 'x64' && !matrix.qemu_emulation_broken }}
+        uses: uraimo/run-on-arch-action@v2
+        with:
+          arch: ${{ matrix.arch }}
+          distro: bullseye
+          dockerRunArgs: --mount type=bind,source="$(pwd)",target=/checkout,readonly
+          run: |
+            find /checkout -name '*.test' -type f -executable -print0 | \
+              xargs -t -0 -I '{}' sh -c '{} -test.v && {} -test.bench=. -test.benchmem -test.v'
