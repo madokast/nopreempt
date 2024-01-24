@@ -187,7 +187,7 @@ jobs:
       # - name: 'BenchRace with ${{ matrix.go }}'
       #   if: ${{ matrix.arch == 'x64' && !matrix.x64_race_broken }}
       #   run: go test -bench=. -benchmem -race -v ./...
-      # - name: 'BuildTest with ${{ matrix.go }} for armv6'
+      - name: 'BuildTest with ${{ matrix.go }} for armv6'
         if: ${{ matrix.arch == 'armv6' }}
         env:
           GOARCH: arm
