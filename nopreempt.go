@@ -9,7 +9,19 @@ func GetMID() int64 {
 }
 
 func DisablePreempt() {
-	getg().m.locks++
+	// getg().m.locks++
+
+	var m, m2 *m
+	g := getg()
+	m = g.m
+retry:
+	m.locks++
+	if m2 = g.m; m != m2 {
+		// stolen. recover and retry
+		m.locks--
+		m = m2
+		goto retry
+	}
 }
 
 func EnablePreempt() {

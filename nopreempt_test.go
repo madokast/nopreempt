@@ -185,13 +185,6 @@ func TestPreempt(t *testing.T) {
 	wg.Wait()
 }
 
-func fun() {
-	DisablePreempt()
-	defer EnablePreempt()
-
-	// code
-}
-
 func goid() int64 {
 	buf := make([]byte, len("goroutine ddddddddd"))
 	runtime.Stack(buf, false)
