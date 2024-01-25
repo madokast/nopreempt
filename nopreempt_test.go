@@ -163,8 +163,8 @@ func TestPreempt(t *testing.T) {
 	wg.Add(1)
 	start := time.Now()
 	go func() {
-		DisablePreempt()
-		defer EnablePreempt()
+		mp := AcquireM()
+		defer mp.Release()
 		for time.Since(start) < 2*time.Second {
 			t.Log("busy")
 			var s float64

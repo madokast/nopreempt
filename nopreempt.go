@@ -1,5 +1,19 @@
 package nopreempt
 
+import (
+	"unsafe"
+)
+
+type MP struct {
+	mp uintptr
+}
+
+//go:linkname acquirem runtime.acquirem
+func acquirem() unsafe.Pointer
+
+//go:linkname releasem runtime.releasem
+func releasem(unsafe.Pointer)
+
 func GetGID() int64 {
 	return getg().goid
 }
@@ -8,22 +22,16 @@ func GetMID() int64 {
 	return getg().m.id
 }
 
-func DisablePreempt() {
-	// getg().m.locks++
-
-	var m, m2 *m
-	g := getg()
-	m = g.m
-retry:
-	m.locks++
-	if m2 = g.m; m != m2 {
-		// stolen. recover and retry
-		m.locks--
-		m = m2
-		goto retry
+func AcquireM() MP {
+	return MP{
+		mp: uintptr(acquirem()),
 	}
 }
 
-func EnablePreempt() {
-	getg().m.locks--
+func (mp MP) MID() int64 {
+	return (*m)(unsafe.Pointer(mp.mp)).id
+}
+
+func (mp MP) Release() {
+	releasem(unsafe.Pointer(mp.mp))
 }
