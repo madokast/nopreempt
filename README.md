@@ -11,10 +11,12 @@ Usage:
 
 ```golang
 func fun() {
-	DisablePreempt()
-	defer EnablePreempt()
+	mp := AcquireM()
 
 	// code will not be preempted
+	// ...
+
+	mp.Release()
 }
 ```
 
